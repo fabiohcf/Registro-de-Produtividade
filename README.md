@@ -21,7 +21,7 @@ Hospedagem: Render
 Controle de versão: Git / GitHub
 
 Estrutura do Projeto
-´´´
+´´´text
 Registro-de-Produtividade/
 ├── app/
 │   ├── models/
