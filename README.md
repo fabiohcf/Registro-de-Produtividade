@@ -21,6 +21,7 @@ Hospedagem: Render
 Controle de versão: Git / GitHub
 
 Estrutura do Projeto
+´´´
 Registro-de-Produtividade/
 ├── app/
 │   ├── models/
@@ -38,7 +39,7 @@ Registro-de-Produtividade/
 ├── .gitignore
 ├── requirements-dev.txt
 └── run.py
-
+´´´
 Instalação
 
 Clone o repositório:
