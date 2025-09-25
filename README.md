@@ -1,6 +1,6 @@
 # Registro de Produtividade (Versão Expandida)
 
-Uma aplicação web para registro de horas de estudo e trabalho, com gestão de usuários, metas e sessões. Evolução da versão resumida disponível [aqui](https://github.com/fabiohcf/Registro-de-Produtividade-Simplificado) e hospedada [neste link](https://registro-de-produtividade-simplificado.onrender.com/).
+Uma aplicação web para registro de horas de estudo e trabalho, com gestão de usuários, metas e sessões. Evolução da versão resumida disponível [aqui](https://github.com/fabiohcf/Registro-de-Produtividade-Simplificado) e hospedada [neste link](https://registro-de-produtividade.onrender.com/).
 
 ## Funcionalidades
 
