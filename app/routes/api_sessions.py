@@ -342,16 +342,15 @@ def list_sessions():
 
     with SessionLocal() as db:
         query = db.query(Session).filter(Session.user_id == user_id)
+
         if start_date:
             query = query.filter(Session.started_at >= start_date)
+
         if end_date:
             query = query.filter(Session.started_at <= end_date)
+
         sessions = query.all()
 
-        return jsonify([{
-            "id": s.id,
-            "started_at": s.started_at.isoformat(),
-            "finished_at": s.finished_at.isoformat() if s.finished_at else None,
-            "duration_hours": float(s.duration_hours) if s.duration_hours else 0,
-            "goal_id": s.goal_id
-        } for s in sessions]), 200
+        return jsonify(
+            [serialize_session(session) for session in sessions]
+        ), 200
