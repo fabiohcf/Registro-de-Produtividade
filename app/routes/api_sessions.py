@@ -8,6 +8,7 @@ from app.database import SessionLocal
 from app.utils.logging_utils import log_action
 from app.models.goal import Goal
 from app.models.user import User
+from flask_jwt_extended import jwt_required, get_jwt_identity
 from app.routes.session_service import (
     VALID_SESSION_TYPES,
     ACTIVE_SESSION_STATUSES,
@@ -331,23 +332,30 @@ def cancel_session():
 
 
 @bp_sessions.route("/list", methods=["GET"])
+@jwt_required()
 def list_sessions():
-    user_id = request.args.get("user_id", type=int)
     start_date = request.args.get("start_date")
     end_date = request.args.get("end_date")
 
-    err = validate_positive_int(user_id, "ID do usuário")
-    if err:
-        return err
+    try:
+        user_id = int(get_jwt_identity())
+    except (TypeError, ValueError):
+        return jsonify({"error": "Identidade de usuário inválida"}), 401
 
     with SessionLocal() as db:
-        query = db.query(Session).filter(Session.user_id == user_id)
+        query = db.query(Session).filter(
+            Session.user_id == user_id
+        )
 
         if start_date:
-            query = query.filter(Session.started_at >= start_date)
+            query = query.filter(
+                Session.started_at >= start_date
+            )
 
         if end_date:
-            query = query.filter(Session.started_at <= end_date)
+            query = query.filter(
+                Session.started_at <= end_date
+            )
 
         sessions = query.all()
 

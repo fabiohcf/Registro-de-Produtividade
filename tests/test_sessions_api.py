@@ -13,23 +13,6 @@ from app.models.user import User
 # Fixtures
 # ==========================================================
 
-@pytest.fixture
-def test_user(db_session):
-    """Cria um usuário de teste."""
-
-    unique = uuid.uuid4().hex
-
-    user = User(
-        username=f"api-user-{unique}",
-        email=f"{unique}@test.com",
-        password_hash=generate_password_hash("123456"),
-    )
-
-    db_session.add(user)
-    db_session.commit()
-
-    return user
-
 
 
 # ==========================================================
@@ -609,4 +592,25 @@ def test_cancel_nonexistent_session(client):
 # LIST
 # ======================================================
 
-# (vazio)
+def test_list_sessions_requires_authentication(client):
+    """
+    Não deve permitir listar sessões sem autenticação.
+    """
+
+    response = client.get("/api/sessions/list")
+
+    assert response.status_code == 401
+
+def test_list_sessions_authenticated(
+    authenticated_client,
+):
+    """
+    Usuário autenticado pode listar suas sessões.
+    """
+
+    response = authenticated_client.get(
+        "/api/sessions/list"
+    )
+
+    assert response.status_code == 200
+    assert isinstance(response.get_json(), list)

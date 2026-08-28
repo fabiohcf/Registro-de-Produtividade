@@ -13,22 +13,6 @@ from app.models.goal import Goal
 # Fixtures
 # ==========================================================
 
-@pytest.fixture
-def test_user(db_session):
-    """Cria usuário para testes."""
-
-    unique = uuid.uuid4().hex
-
-    user = User(
-        username=f"goal-user-{unique}",
-        email=f"{unique}@test.com",
-        password_hash=generate_password_hash("123456"),
-    )
-
-    db_session.add(user)
-    db_session.commit()
-
-    return user
 
 
 # ==========================================================

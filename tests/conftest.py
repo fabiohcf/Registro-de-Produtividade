@@ -65,3 +65,22 @@ def test_user(db_session):
     db_session.commit()
 
     return user
+
+
+@pytest.fixture
+def authenticated_client(client, test_user):
+    """
+    Retorna cliente autenticado como test_user.
+    """
+
+    response = client.post(
+        "/auth/login",
+        json={
+            "username": test_user.username,
+            "password": "123456",
+        },
+    )
+
+    assert response.status_code == 200
+
+    return client
