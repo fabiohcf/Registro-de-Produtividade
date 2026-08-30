@@ -22,20 +22,40 @@ def login():
     username = data.get("username")
     password = data.get("password")
 
-    session = SessionLocal()
-    user = session.query(User).filter_by(username=username).first()
+    with SessionLocal() as db:
+        user = db.query(User).filter_by(
+            username=username
+        ).first()
 
-    if not user or not check_password_hash(user.password_hash, password):
-        return jsonify({"msg": "Credenciais inválidas"}), 401
+        if not user or not check_password_hash(
+            user.password_hash,
+            password,
+        ):
+            return jsonify({"msg": "Credenciais inválidas"}), 401
 
-    access_token = create_access_token(identity=str(user.id))
-    refresh_token = create_refresh_token(identity=str(user.id))
+        access_token = create_access_token(
+            identity=str(user.id)
+        )
 
-    resp = jsonify({"msg": "Login bem-sucedido"})
-    set_access_cookies(resp, access_token)
-    set_refresh_cookies(resp, refresh_token)
+        refresh_token = create_refresh_token(
+            identity=str(user.id)
+        )
 
-    return resp, 200
+        resp = jsonify({
+            "msg": "Login bem-sucedido"
+        })
+
+        set_access_cookies(
+            resp,
+            access_token,
+        )
+
+        set_refresh_cookies(
+            resp,
+            refresh_token,
+        )
+
+        return resp, 200
 
 @auth_bp.route("/refresh", methods=["POST"])
 @jwt_required(refresh=True)

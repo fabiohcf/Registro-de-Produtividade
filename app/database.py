@@ -4,27 +4,42 @@ import os
 
 from dotenv import load_dotenv
 from sqlalchemy import create_engine
-from sqlalchemy.orm import declarative_base, scoped_session, sessionmaker
+from sqlalchemy.orm import declarative_base, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 load_dotenv()
 
-# Detecta modo de teste
-TESTING = os.getenv("TESTING", "").lower() in ("1", "true", "yes") or (
-    "PYTEST_CURRENT_TEST" in os.environ
-)
 
-# Define URL do banco
+# ==========================================================
+# Database configuration
+# ==========================================================
+
+TESTING = os.getenv("TESTING", "").lower() in (
+    "1",
+    "true",
+    "yes",
+) or "PYTEST_CURRENT_TEST" in os.environ
+
+
 if TESTING:
-    DATABASE_URL = os.getenv("TEST_DATABASE_URL", "sqlite:///:memory:")
+    DATABASE_URL = os.getenv(
+        "TEST_DATABASE_URL",
+        "sqlite:///:memory:",
+    )
 else:
     DATABASE_URL = os.getenv("DATABASE_URL")
+
     if not DATABASE_URL:
         raise RuntimeError(
-            "DATABASE_URL não definido. Ex.: postgresql+psycopg2://usuario:senha@localhost:5432/registro_prod"
+            "DATABASE_URL não definido. "
+            "Ex.: postgresql+psycopg2://usuario:senha@localhost:5432/registro_prod"
         )
 
-# Configuração do engine
+
+# ==========================================================
+# Engine
+# ==========================================================
+
 if DATABASE_URL.startswith("sqlite") and ":memory:" in DATABASE_URL:
     engine = create_engine(
         DATABASE_URL,
@@ -34,7 +49,9 @@ if DATABASE_URL.startswith("sqlite") and ":memory:" in DATABASE_URL:
     )
 else:
     connect_args = (
-        {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
+        {"check_same_thread": False}
+        if DATABASE_URL.startswith("sqlite")
+        else {}
     )
 
     engine = create_engine(
@@ -44,30 +61,21 @@ else:
         pool_pre_ping=True,
     )
 
-# Base dos models
+
+# ==========================================================
+# ORM base
+# ==========================================================
+
 Base = declarative_base()
 
+
+# ==========================================================
 # Session factory
+# ==========================================================
+
 SessionLocal = sessionmaker(
     bind=engine,
     autocommit=False,
     autoflush=False,
 )
-
-# Scoped session para uso global
-db_session = scoped_session(SessionLocal)
-
-Base.query = db_session.query_property()
-
-
-def get_db_session():
-    """
-    Gerador de sessão para dependências (ex: rotas ou serviços).
-    """
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
 

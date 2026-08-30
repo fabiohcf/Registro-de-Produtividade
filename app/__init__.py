@@ -2,10 +2,10 @@
 
 from flask import Flask
 from flask_jwt_extended import JWTManager
-from flask_cors import CORS  
+from flask_cors import CORS
 from dotenv import load_dotenv
 import os
-from app.database import db_session
+
 
 jwt = JWTManager()
 
@@ -17,7 +17,10 @@ def create_app(testing: bool = False):
 
     CORS(app, origins=["http://localhost:8080"])
 
-    app.config["JWT_SECRET_KEY"] = os.getenv("JWT_SECRET_KEY", "dev-secret-change-me")
+    app.config["JWT_SECRET_KEY"] = os.getenv(
+        "JWT_SECRET_KEY",
+        "dev-secret-change-me",
+    )
     app.config["JWT_TOKEN_LOCATION"] = ["cookies"]
     app.config["JWT_ACCESS_COOKIE_NAME"] = "access_token_cookie"
     app.config["JWT_REFRESH_COOKIE_NAME"] = "refresh_token_cookie"
@@ -48,10 +51,6 @@ def create_app(testing: bool = False):
     app.register_blueprint(main_bp)
     app.register_blueprint(bp_sessions)
 
-    @app.teardown_appcontext
-    def shutdown_session(exception=None):
-        db_session.remove()
-    
     print(app.url_map)
 
     return app
