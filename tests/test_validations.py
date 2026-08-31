@@ -88,34 +88,20 @@ def test_create_goal_with_invalid_user_id(client, db_session):
     assert data["error"] == "Usuário não encontrado"
 
 
-def test_start_session_with_invalid_user_id(client, db_session):
-    """Testa início de sessão com usuário inexistente."""
-    resp = client.post(
+
+
+def test_sessions_without_json_data(authenticated_client):
+    """Testa endpoint de sessão sem dados JSON."""
+
+    resp = authenticated_client.post(
         "/api/sessions/start",
-        json={
-            "user_id":99999,
-            "session_type":"study"
-        }
+        data="não é json",
+        content_type="text/plain",
     )
 
-    assert resp.status_code == 404
-
-
-def test_start_session_with_invalid_data_type(client, db_session):
-    """Testa início de sessão com tipo de dados inválido."""
-    resp = client.post("/api/sessions/start", json={"user_id": "não é número"})
-    assert resp.status_code == 400
-    data = resp.get_json()
-    assert "deve ser um número inteiro positivo" in data["error"]
-
-
-def test_sessions_without_json_data(client, db_session):
-    """Testa endpoints de sessão sem dados JSON."""
-    resp = client.post(
-        "/api/sessions/start", data="não é json", content_type="text/plain"
-    )
-    # Flask retorna 415 para content-type não suportado
+    # Flask retorna 415 para content-type não suportado.
     assert resp.status_code == 415
+
 
 
 def test_goals_without_json_data(client, db_session):

@@ -47,12 +47,12 @@ def test_create_session(db_session, test_user):
     )
 
 
-def test_start_pause_resume_finish_session(client, test_user):
 
-    response = client.post(
+def test_start_pause_resume_finish_session(authenticated_client):
+
+    response = authenticated_client.post(
         "/api/sessions/start",
         json={
-            "user_id": test_user.id,
             "session_type": "study",
         },
     )
@@ -63,8 +63,7 @@ def test_start_pause_resume_finish_session(client, test_user):
         response.get_json()["session"]["id"]
     )
 
-
-    response = client.post(
+    response = authenticated_client.post(
         "/api/sessions/pause",
         json={
             "session_id": session_id
@@ -77,8 +76,7 @@ def test_start_pause_resume_finish_session(client, test_user):
 
     assert session["status"] == "paused"
 
-
-    response = client.post(
+    response = authenticated_client.post(
         "/api/sessions/resume",
         json={
             "session_id": session_id
@@ -91,8 +89,7 @@ def test_start_pause_resume_finish_session(client, test_user):
 
     assert session["status"] == "running"
 
-
-    response = client.post(
+    response = authenticated_client.post(
         "/api/sessions/finish",
         json={
             "session_id": session_id
@@ -105,3 +102,4 @@ def test_start_pause_resume_finish_session(client, test_user):
 
     assert session["status"] == "finished"
     assert session["duration_hours"] >= 0
+

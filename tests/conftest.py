@@ -83,6 +83,26 @@ def test_user(db_session):
     return user
 
 
+
+@pytest.fixture
+def other_user(db_session):
+    """
+    Cria um segundo usuário para testes de isolamento e ownership.
+    """
+
+    user = User(
+        username=f"OtherUser_{uuid.uuid4().hex[:8]}",
+        email=f"{uuid.uuid4()}@example.com",
+        password_hash=generate_password_hash("123456"),
+    )
+
+    db_session.add(user)
+    db_session.commit()
+
+    return user
+
+
+
 @pytest.fixture
 def authenticated_client(client, test_user):
     """
