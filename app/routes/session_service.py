@@ -1,8 +1,7 @@
 # app/routes/session_service.py
 
+from datetime import datetime, timezone
 from decimal import Decimal
-
-from flask import jsonify, request
 
 from app.models.session import Session
 
@@ -31,41 +30,18 @@ QUESTION_SESSION_TYPES = {
 
 
 # ==========================================================
-# Generic validations
+# Validations
 # ==========================================================
 
-def get_request_data():
+def validate_positive_int(value):
     """
-    Obtém e valida o JSON da requisição.
-    """
-
-    data = request.get_json()
-
-    if not data:
-        return None, (
-            jsonify({"error": "Dados JSON são obrigatórios"}),
-            400,
-        )
-
-    return data, None
-
-
-def validate_positive_int(value, field_name):
-    """
-    Valida inteiro positivo.
+    Valida se o valor é um inteiro positivo.
     """
 
     if not isinstance(value, int) or value <= 0:
-        return (
-            jsonify(
-                {
-                    "error": f"{field_name} deve ser um número inteiro positivo"
-                }
-            ),
-            400,
+        raise ValueError(
+            "O valor deve ser um número inteiro positivo"
         )
-
-    return None
 
 
 def validate_session_type(session_type):
@@ -74,19 +50,10 @@ def validate_session_type(session_type):
     """
 
     if session_type not in VALID_SESSION_TYPES:
-        return (
-            jsonify(
-                {
-                    "error": (
-                        f"Tipo de sessão inválido. "
-                        f"Valores aceitos: {sorted(VALID_SESSION_TYPES)}"
-                    )
-                }
-            ),
-            400,
+        raise ValueError(
+            f"Tipo de sessão inválido. "
+            f"Valores aceitos: {sorted(VALID_SESSION_TYPES)}"
         )
-
-    return None
 
 
 # ==========================================================
@@ -95,18 +62,26 @@ def validate_session_type(session_type):
 
 def get_session(db, session_id):
     """
-    Busca sessão pelo ID.
+    Busca uma sessão pelo ID.
+    """
+
+    return db.get(Session, session_id)
+
+
+def get_user_session(db, session_id, user_id):
+    """
+    Busca uma sessão garantindo que ela pertence ao usuário.
     """
 
     session = db.get(Session, session_id)
 
     if session is None:
-        return None, (
-            jsonify({"error": "Sessão não encontrada"}),
-            404,
-        )
+        return None
 
-    return session, None
+    if session.user_id != user_id:
+        return None
+
+    return session
 
 
 def get_active_session(db, user_id):
@@ -134,19 +109,10 @@ def validate_session_status(session_obj, expected_status):
     """
 
     if session_obj.status != expected_status:
-        return (
-            jsonify(
-                {
-                    "error": (
-                        f"A sessão deve estar em "
-                        f"'{expected_status}'."
-                    )
-                }
-            ),
-            400,
+        raise ValueError(
+            f"A sessão deve estar em '{expected_status}'."
         )
 
-    return None
 
 def validate_finishable_session(session):
     """
@@ -156,20 +122,220 @@ def validate_finishable_session(session):
     podem ser finalizadas.
     """
 
-    if session.status not in {"running", "paused"}:
-        return (
-            jsonify(
-                {
-                    "error": (
-                        "Somente sessões em execução "
-                        "ou pausadas podem ser finalizadas."
-                    )
-                }
-            ),
-            400,
+    if session.status not in ACTIVE_SESSION_STATUSES:
+        raise ValueError(
+            "Somente sessões em execução ou pausadas "
+            "podem ser finalizadas."
         )
 
-    return None
+
+# ==========================================================
+# Session operations
+# ==========================================================
+
+def start_session(
+    db,
+    user_id,
+    session_type,
+    description=None,
+):
+    """
+    Inicia uma nova sessão para o usuário.
+    """
+
+    validate_positive_int(user_id)
+    validate_session_type(session_type)
+
+    active_session = get_active_session(db, user_id)
+
+    if active_session:
+        raise ValueError(
+            "Usuário já possui uma sessão ativa"
+        )
+
+    if description:
+        description = description.strip()
+
+    now = datetime.now(timezone.utc)
+
+    new_session = Session(
+        user_id=user_id,
+        session_type=session_type,
+        description=description,
+        status="running",
+        started_at=now,
+        finished_at=None,
+        duration_hours=Decimal("0"),
+        paused_seconds=0,
+        paused_at=None,
+        questions_total=None,
+        questions_correct=None,
+    )
+
+    db.add(new_session)
+    db.commit()
+    db.refresh(new_session)
+
+    return new_session
+
+
+def pause_session(db, session_id, user_id):
+    """
+    Pausa uma sessão em execução.
+    """
+
+    validate_positive_int(session_id)
+
+    session = get_user_session(
+        db,
+        session_id,
+        user_id,
+    )
+
+    if session is None:
+        return None
+
+    validate_session_status(
+        session,
+        "running",
+    )
+
+    session.status = "paused"
+    session.paused_at = datetime.now(timezone.utc)
+
+    db.commit()
+    db.refresh(session)
+
+    return session
+
+
+def resume_session(db, session_id, user_id):
+    """
+    Retoma uma sessão pausada.
+    """
+
+    validate_positive_int(session_id)
+
+    session = get_user_session(
+        db,
+        session_id,
+        user_id,
+    )
+
+    if session is None:
+        return None
+
+    validate_session_status(
+        session,
+        "paused",
+    )
+
+    now = datetime.now(timezone.utc)
+
+    paused_seconds = int(
+        (now - session.paused_at).total_seconds()
+    )
+
+    session.paused_seconds += paused_seconds
+    session.paused_at = None
+    session.status = "running"
+
+    db.commit()
+    db.refresh(session)
+
+    return session
+
+
+def finish_session(db, session_id, user_id):
+    """
+    Finaliza uma sessão em execução ou pausada.
+    """
+
+    validate_positive_int(session_id)
+
+    session = get_user_session(
+        db,
+        session_id,
+        user_id,
+    )
+
+    if session is None:
+        return None
+
+    validate_finishable_session(session)
+
+    now = datetime.now(timezone.utc)
+
+    # Caso esteja pausada, soma o último período pausado.
+    if session.status == "paused":
+        session.paused_seconds += int(
+            (now - session.paused_at).total_seconds()
+        )
+
+        session.paused_at = None
+
+    session.finished_at = now
+    session.status = "finished"
+
+    session.duration_hours = calculate_duration_hours(
+        session.started_at,
+        now,
+        session.paused_seconds,
+    )
+
+    db.commit()
+    db.refresh(session)
+
+    return session
+
+
+def cancel_session(db, session_id, user_id):
+    """
+    Cancela uma sessão ativa.
+
+    A sessão é removida fisicamente do banco.
+    """
+
+    validate_positive_int(session_id)
+
+    session = get_user_session(
+        db,
+        session_id,
+        user_id,
+    )
+
+    if session is None:
+        return None
+
+    if session.status == "finished":
+        raise ValueError(
+            "Sessões finalizadas não podem ser canceladas."
+        )
+
+    session_user_id = session.user_id
+    session_id = session.id
+
+    db.delete(session)
+    db.commit()
+
+    return {
+        "user_id": session_user_id,
+        "session_id": session_id,
+    }
+
+def list_sessions(db, user_id):
+    """
+    Lista todas as sessões pertencentes ao usuário autenticado.
+    """
+
+    validate_positive_int(user_id)
+
+    return (
+        db.query(Session)
+        .filter(Session.user_id == user_id)
+        .all()
+    )
+
 
 # ==========================================================
 # Time helpers
@@ -188,52 +354,11 @@ def calculate_duration_hours(
         finished_at - started_at
     ).total_seconds()
 
-    active_seconds = elapsed_seconds - (paused_seconds or 0)
+    active_seconds = (
+        elapsed_seconds - (paused_seconds or 0)
+    )
 
     if active_seconds < 0:
         active_seconds = 0
 
     return Decimal(active_seconds / 3600)
-
-
-# ==========================================================
-# Serialization
-# ==========================================================
-
-def serialize_session(session):
-    """
-    Converte Session em dicionário JSON.
-    """
-
-    return {
-        "id": session.id,
-        "user_id": session.user_id,
-
-        "status": session.status,
-
-        "session_type": session.session_type,
-        "description": session.description,
-
-        "started_at": (
-            session.started_at.isoformat()
-            if session.started_at
-            else None
-        ),
-
-        "finished_at": (
-            session.finished_at.isoformat()
-            if session.finished_at
-            else None
-        ),
-
-        "duration_hours": (
-            float(session.duration_hours)
-            if session.duration_hours is not None
-            else 0
-        ),
-
-        "paused_seconds": session.paused_seconds,
-
-        "questions_total": session.questions_total,
-        "questions_correct": session.questions_correct,
-    }

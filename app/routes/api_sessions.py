@@ -1,26 +1,16 @@
 from flask import Blueprint, request, jsonify
-from decimal import Decimal
-from datetime import datetime, timezone
 
 from flask_jwt_extended import jwt_required, get_jwt_identity
 
-from app.models.session import Session
-from app.models.user import User
 from app.database import SessionLocal
 from app.utils.logging_utils import log_action
 from app.routes.session_service import (
-    VALID_SESSION_TYPES,
-    ACTIVE_SESSION_STATUSES,
-    QUESTION_SESSION_TYPES,
-    get_request_data,
-    validate_positive_int,
-    validate_session_type,
-    get_session,
-    get_active_session,
-    calculate_duration_hours,
-    serialize_session,
-    validate_session_status,
-    validate_finishable_session,
+    start_session as start_session_service,
+    pause_session as pause_session_service,
+    resume_session as resume_session_service,
+    finish_session as finish_session_service,
+    cancel_session as cancel_session_service,
+    list_sessions as list_sessions_service,
 )
 
 import os
@@ -50,27 +40,37 @@ def _get_authenticated_user_id():
         return None
 
 
-def _get_owned_session(db, session_id, user_id):
+def _serialize_session(session):
     """
-    Obtém uma sessão garantindo que ela pertence
-    ao usuário autenticado.
-
-    Caso a sessão exista, mas pertença a outro usuário,
-    retorna 404 para não revelar a existência do recurso.
+    Converte uma sessão SQLAlchemy para o formato
+    de resposta da API.
     """
 
-    session_obj, error = get_session(db, session_id)
-
-    if error:
-        return None, error
-
-    if session_obj.user_id != user_id:
-        return None, (
-            jsonify({"error": "Sessão não encontrada"}),
-            404,
-        )
-
-    return session_obj, None
+    return {
+        "id": session.id,
+        "user_id": session.user_id,
+        "status": session.status,
+        "session_type": session.session_type,
+        "description": session.description,
+        "started_at": (
+            session.started_at.isoformat()
+            if session.started_at
+            else None
+        ),
+        "finished_at": (
+            session.finished_at.isoformat()
+            if session.finished_at
+            else None
+        ),
+        "duration_hours": (
+            float(session.duration_hours)
+            if session.duration_hours is not None
+            else 0
+        ),
+        "paused_seconds": session.paused_seconds,
+        "questions_total": session.questions_total,
+        "questions_correct": session.questions_correct,
+    }
 
 
 # ==========================================================
@@ -80,10 +80,12 @@ def _get_owned_session(db, session_id, user_id):
 @bp_sessions.route("/start", methods=["POST"])
 @jwt_required()
 def start_session():
+    data = request.get_json()
 
-    data, error = get_request_data()
-    if error:
-        return error
+    if not data:
+        return jsonify(
+            {"error": "Dados JSON são obrigatórios"}
+        ), 400
 
     user_id = _get_authenticated_user_id()
 
@@ -95,68 +97,29 @@ def start_session():
     session_type = data.get("session_type")
     description = data.get("description")
 
-    err = validate_session_type(session_type)
-    if err:
-        return err
-
-    if description:
-        description = description.strip()
-
-    now = datetime.now(timezone.utc)
-
     with SessionLocal() as db:
-
-        user = db.get(User, user_id)
-
-        if not user:
+        try:
+            session = start_session_service(
+                db=db,
+                user_id=user_id,
+                session_type=session_type,
+                description=description,
+            )
+        except ValueError as error:
             return jsonify(
-                {"error": "Usuário não encontrado"}
-            ), 404
-
-        active_session = get_active_session(
-            db,
-            user_id,
-        )
-
-        if active_session:
-            return jsonify(
-                {"error": "Usuário já possui uma sessão ativa"}
+                {"error": str(error)}
             ), 400
 
-        new_session = Session(
-            user_id=user_id,
-
-            session_type=session_type,
-            description=description,
-
-            status="running",
-
-            started_at=now,
-            finished_at=None,
-
-            duration_hours=Decimal("0"),
-
-            paused_seconds=0,
-            paused_at=None,
-
-            questions_total=None,
-            questions_correct=None,
-        )
-
-        db.add(new_session)
-        db.commit()
-        db.refresh(new_session)
-
         log_action(
-            new_session.user_id,
-            new_session.id,
+            session.user_id,
+            session.id,
             "start",
         )
 
         return jsonify(
             {
                 "message": "Sessão iniciada com sucesso",
-                "session": serialize_session(new_session),
+                "session": _serialize_session(session),
             }
         ), 201
 
@@ -169,9 +132,12 @@ def start_session():
 @jwt_required()
 def pause_session():
 
-    data, error = get_request_data()
-    if error:
-        return error
+    data = request.get_json()
+
+    if not data:
+        return jsonify(
+            {"error": "Dados JSON são obrigatórios"}
+        ), 400
 
     user_id = _get_authenticated_user_id()
 
@@ -182,49 +148,33 @@ def pause_session():
 
     session_id = data.get("session_id")
 
-    err = validate_positive_int(
-        session_id,
-        "ID da sessão",
-    )
-
-    if err:
-        return err
-
     with SessionLocal() as db:
+        try:
+            session = pause_session_service(
+                db=db,
+                session_id=session_id,
+                user_id=user_id,
+            )
+        except ValueError as error:
+            return jsonify(
+                {"error": str(error)}
+            ), 400
 
-        session_obj, err = _get_owned_session(
-            db,
-            session_id,
-            user_id,
-        )
-
-        if err:
-            return err
-
-        err = validate_session_status(
-            session_obj,
-            "running",
-        )
-
-        if err:
-            return err
-
-        session_obj.status = "paused"
-        session_obj.paused_at = datetime.now(timezone.utc)
-
-        db.commit()
-        db.refresh(session_obj)
+        if session is None:
+            return jsonify(
+                {"error": "Sessão não encontrada"}
+            ), 404
 
         log_action(
-            session_obj.user_id,
-            session_obj.id,
+            session.user_id,
+            session.id,
             "pause",
         )
 
         return jsonify(
             {
                 "message": "Sessão pausada com sucesso",
-                "session": serialize_session(session_obj),
+                "session": _serialize_session(session),
             }
         ), 200
 
@@ -237,9 +187,12 @@ def pause_session():
 @jwt_required()
 def resume_session():
 
-    data, error = get_request_data()
-    if error:
-        return error
+    data = request.get_json()
+
+    if not data:
+        return jsonify(
+            {"error": "Dados JSON são obrigatórios"}
+        ), 400
 
     user_id = _get_authenticated_user_id()
 
@@ -250,49 +203,26 @@ def resume_session():
 
     session_id = data.get("session_id")
 
-    err = validate_positive_int(
-        session_id,
-        "ID da sessão",
-    )
-
-    if err:
-        return err
-
     with SessionLocal() as db:
+        try:
+            session = resume_session_service(
+                db=db,
+                session_id=session_id,
+                user_id=user_id,
+            )
+        except ValueError as error:
+            return jsonify(
+                {"error": str(error)}
+            ), 400
 
-        session_obj, error = _get_owned_session(
-            db,
-            session_id,
-            user_id,
-        )
-
-        if error:
-            return error
-
-        err = validate_session_status(
-            session_obj,
-            "paused",
-        )
-
-        if err:
-            return err
-
-        now = datetime.now(timezone.utc)
-
-        paused_seconds = int(
-            (now - session_obj.paused_at).total_seconds()
-        )
-
-        session_obj.paused_seconds += paused_seconds
-        session_obj.paused_at = None
-        session_obj.status = "running"
-
-        db.commit()
-        db.refresh(session_obj)
+        if session is None:
+            return jsonify(
+                {"error": "Sessão não encontrada"}
+            ), 404
 
         log_action(
-            session_obj.user_id,
-            session_obj.id,
+            session.user_id,
+            session.id,
             "resume",
         )
 
@@ -300,7 +230,7 @@ def resume_session():
             jsonify(
                 {
                     "message": "Sessão retomada com sucesso.",
-                    "session": serialize_session(session_obj),
+                    "session": _serialize_session(session),
                 }
             ),
             200,
@@ -315,9 +245,12 @@ def resume_session():
 @jwt_required()
 def finish_session():
 
-    data, error = get_request_data()
-    if error:
-        return error
+    data = request.get_json()
+
+    if not data:
+        return jsonify(
+            {"error": "Dados JSON são obrigatórios"}
+        ), 400
 
     user_id = _get_authenticated_user_id()
 
@@ -328,60 +261,26 @@ def finish_session():
 
     session_id = data.get("session_id")
 
-    err = validate_positive_int(
-        session_id,
-        "ID da sessão",
-    )
-
-    if err:
-        return err
-
-    now = datetime.now(timezone.utc)
-
     with SessionLocal() as db:
-
-        session_obj, error = _get_owned_session(
-            db,
-            session_id,
-            user_id,
-        )
-
-        if error:
-            return error
-
-        err = validate_finishable_session(session_obj)
-
-        if err:
-            return err
-
-        # Caso esteja pausada,
-        # soma o último período pausado.
-        if session_obj.status == "paused":
-
-            session_obj.paused_seconds += int(
-                (now - session_obj.paused_at).total_seconds()
+        try:
+            session = finish_session_service(
+                db=db,
+                session_id=session_id,
+                user_id=user_id,
             )
+        except ValueError as error:
+            return jsonify(
+                {"error": str(error)}
+            ), 400
 
-            session_obj.paused_at = None
-
-        session_obj.finished_at = now
-
-        session_obj.status = "finished"
-
-        session_obj.duration_hours = (
-            calculate_duration_hours(
-                session_obj.started_at,
-                now,
-                session_obj.paused_seconds,
-            )
-        )
-
-        db.commit()
-        db.refresh(session_obj)
+        if session is None:
+            return jsonify(
+                {"error": "Sessão não encontrada"}
+            ), 404
 
         log_action(
-            session_obj.user_id,
-            session_obj.id,
+            session.user_id,
+            session.id,
             "finish",
         )
 
@@ -389,7 +288,7 @@ def finish_session():
             jsonify(
                 {
                     "message": "Sessão finalizada com sucesso.",
-                    "session": serialize_session(session_obj),
+                    "session": _serialize_session(session),
                 }
             ),
             200,
@@ -404,9 +303,12 @@ def finish_session():
 @jwt_required()
 def cancel_session():
 
-    data, error = get_request_data()
-    if error:
-        return error
+    data = request.get_json()
+
+    if not data:
+        return jsonify(
+            {"error": "Dados JSON são obrigatórios"}
+        ), 400
 
     user_id = _get_authenticated_user_id()
 
@@ -417,55 +319,39 @@ def cancel_session():
 
     session_id = data.get("session_id")
 
-    err = validate_positive_int(
-        session_id,
-        "ID da sessão",
-    )
-
-    if err:
-        return err
+    if session_id is None:
+        return jsonify(
+            {"error": "ID da sessão é obrigatório"}
+        ), 400
 
     with SessionLocal() as db:
-
-        session_obj, error = _get_owned_session(
-            db,
-            session_id,
-            user_id,
-        )
-
-        if error:
-            return error
-
-        if session_obj.status == "finished":
-            return (
-                jsonify(
-                    {
-                        "error": (
-                            "Sessões finalizadas "
-                            "não podem ser canceladas."
-                        )
-                    }
-                ),
-                400,
+        try:
+            result = cancel_session_service(
+                db=db,
+                session_id=session_id,
+                user_id=user_id,
             )
+        except ValueError as error:
+            return jsonify(
+                {"error": str(error)}
+            ), 400
+
+        if result is None:
+            return jsonify(
+                {"error": "Sessão não encontrada"}
+            ), 404
 
         log_action(
-            session_obj.user_id,
-            session_obj.id,
+            result["user_id"],
+            result["session_id"],
             "cancel",
         )
 
-        db.delete(session_obj)
-        db.commit()
-
-        return (
-            jsonify(
-                {
-                    "message": "Sessão cancelada com sucesso."
-                }
-            ),
-            200,
-        )
+        return jsonify(
+            {
+                "message": "Sessão cancelada com sucesso."
+            }
+        ), 200
 
 
 # ==========================================================
@@ -476,9 +362,6 @@ def cancel_session():
 @jwt_required()
 def list_sessions():
 
-    start_date = request.args.get("start_date")
-    end_date = request.args.get("end_date")
-
     user_id = _get_authenticated_user_id()
 
     if user_id is None:
@@ -487,26 +370,19 @@ def list_sessions():
         ), 401
 
     with SessionLocal() as db:
-
-        query = db.query(Session).filter(
-            Session.user_id == user_id
-        )
-
-        if start_date:
-            query = query.filter(
-                Session.started_at >= start_date
+        try:
+            sessions = list_sessions_service(
+                db=db,
+                user_id=user_id,
             )
-
-        if end_date:
-            query = query.filter(
-                Session.started_at <= end_date
-            )
-
-        sessions = query.all()
+        except ValueError as error:
+            return jsonify(
+                {"error": str(error)}
+            ), 400
 
         return jsonify(
             [
-                serialize_session(session)
+                _serialize_session(session)
                 for session in sessions
             ]
         ), 200
