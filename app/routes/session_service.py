@@ -156,7 +156,7 @@ def start_session(
     if description:
         description = description.strip()
 
-    now = datetime.now(timezone.utc)
+    now = utc_now()
 
     new_session = Session(
         user_id=user_id,
@@ -201,7 +201,7 @@ def pause_session(db, session_id, user_id):
     )
 
     session.status = "paused"
-    session.paused_at = datetime.now(timezone.utc)
+    session.paused_at = utc_now()
 
     db.commit()
     db.refresh(session)
@@ -230,7 +230,7 @@ def resume_session(db, session_id, user_id):
         "paused",
     )
 
-    now = datetime.now(timezone.utc)
+    now = utc_now()
 
     paused_at = ensure_utc(session.paused_at)
 
@@ -266,7 +266,7 @@ def finish_session(db, session_id, user_id):
 
     validate_finishable_session(session)
 
-    now = datetime.now(timezone.utc)
+    now = utc_now()
 
     # Caso esteja pausada, soma o último período pausado.
     if session.status == "paused":
@@ -360,6 +360,16 @@ def ensure_utc(value):
 
     return value.astimezone(timezone.utc)
 
+def utc_now():
+    """
+    Retorna o instante atual em UTC.
+
+    Centralizar a obtenção do horário permite testes
+    determinísticos das operações temporais da sessão.
+    """
+
+    return datetime.now(timezone.utc)
+
 
 def calculate_duration_hours(
     started_at,
@@ -385,4 +395,4 @@ def calculate_duration_hours(
     if active_seconds < 0:
         active_seconds = 0
 
-    return Decimal(active_seconds / 3600)
+    return Decimal(str(active_seconds)) / Decimal("3600")
