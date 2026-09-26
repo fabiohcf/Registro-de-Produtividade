@@ -232,8 +232,10 @@ def resume_session(db, session_id, user_id):
 
     now = datetime.now(timezone.utc)
 
+    paused_at = ensure_utc(session.paused_at)
+
     paused_seconds = int(
-        (now - session.paused_at).total_seconds()
+        (now - paused_at).total_seconds()
     )
 
     session.paused_seconds += paused_seconds
@@ -268,8 +270,10 @@ def finish_session(db, session_id, user_id):
 
     # Caso esteja pausada, soma o último período pausado.
     if session.status == "paused":
+        paused_at = ensure_utc(session.paused_at)
+
         session.paused_seconds += int(
-            (now - session.paused_at).total_seconds()
+            (now - paused_at).total_seconds()
         )
 
         session.paused_at = None
@@ -278,7 +282,7 @@ def finish_session(db, session_id, user_id):
     session.status = "finished"
 
     session.duration_hours = calculate_duration_hours(
-        session.started_at,
+        ensure_utc(session.started_at),
         now,
         session.paused_seconds,
     )
@@ -341,6 +345,22 @@ def list_sessions(db, user_id):
 # Time helpers
 # ==========================================================
 
+
+def ensure_utc(value):
+    """
+    Normaliza um datetime para UTC.
+
+    SQLite pode devolver valores DateTime sem informação
+    de timezone, mesmo quando a coluna usa timezone=True.
+    Datetimes naive do domínio são tratados como UTC.
+    """
+
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+
+    return value.astimezone(timezone.utc)
+
+
 def calculate_duration_hours(
     started_at,
     finished_at,
@@ -349,6 +369,10 @@ def calculate_duration_hours(
     """
     Calcula o tempo líquido da sessão.
     """
+
+    started_at = ensure_utc(started_at)
+    finished_at = ensure_utc(finished_at)
+
 
     elapsed_seconds = (
         finished_at - started_at

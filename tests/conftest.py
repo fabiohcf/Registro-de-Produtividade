@@ -1,13 +1,30 @@
 # tests/conftest.py
 
-import pytest
+import os
 import uuid
 
+import pytest
+
 from werkzeug.security import generate_password_hash
+
+
+# ==========================================================
+# Test database isolation
+# ==========================================================
+
+# Define explicitamente o ambiente de testes antes de importar
+# qualquer módulo da aplicação que inicialize o banco.
+os.environ["TESTING"] = "true"
+os.environ["TEST_DATABASE_URL"] = "sqlite:///:memory:"
+
 
 from app import create_app
 from app.database import Base, engine, SessionLocal
 from app.models.user import User
+
+assert engine.dialect.name == "sqlite", (
+    "A suíte de testes deve utilizar SQLite."
+)
 
 
 @pytest.fixture(scope="session")

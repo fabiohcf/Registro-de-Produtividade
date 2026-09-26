@@ -4,6 +4,7 @@
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from app.models.session import Session
+from app.routes.session_service import ensure_utc
 
 
 def test_create_session(db_session, test_user):
@@ -36,16 +37,8 @@ def test_create_session(db_session, test_user):
     assert db_sessao.status == "finished"
     assert db_sessao.finished_at is not None
 
-    assert (
-        db_sessao.started_at.astimezone(timezone.utc)
-        == start_time
-    )
-
-    assert (
-        db_sessao.finished_at.astimezone(timezone.utc)
-        == end_time
-    )
-
+    assert ensure_utc(db_sessao.started_at) == start_time
+    assert ensure_utc(db_sessao.finished_at) == end_time
 
 
 def test_start_pause_resume_finish_session(authenticated_client):

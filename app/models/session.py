@@ -8,6 +8,8 @@ from sqlalchemy import (
     Numeric,
     String,
     CheckConstraint,
+    Index,
+    text,
 )
 from sqlalchemy.orm import relationship
 
@@ -18,6 +20,24 @@ class Session(Base):
     __tablename__ = "sessions"
 
     __table_args__ = (
+        CheckConstraint(
+            "status IN ('running', 'paused', 'finished')",
+            name="ck_session_status",
+        ),
+        CheckConstraint(
+            "session_type IN ('study', 'revision', 'questions', 'essay', 'mock_exam')",
+            name="ck_session_type",
+        ),
+        CheckConstraint(
+            """
+            (status = 'running' AND paused_at IS NULL AND finished_at IS NULL)
+            OR
+            (status = 'paused' AND paused_at IS NOT NULL AND finished_at IS NULL)
+            OR
+            (status = 'finished' AND paused_at IS NULL AND finished_at IS NOT NULL)
+            """,
+            name="ck_session_status_timestamps",
+        ),
         CheckConstraint(
             "paused_seconds >= 0",
             name="ck_session_paused_seconds",
@@ -33,6 +53,17 @@ class Session(Base):
         CheckConstraint(
             "duration_hours >= 0",
             name="ck_session_duration_hours",
+        ),
+        Index(
+            "uq_session_active_per_user",
+            "user_id",
+            unique=True,
+            postgresql_where=text(
+                "status IN ('running', 'paused')"
+            ),
+            sqlite_where=text(
+                "status IN ('running', 'paused')"
+            ),
         ),
     )
 
@@ -59,7 +90,7 @@ class Session(Base):
 
     started_at = Column(
         DateTime(timezone=True),
-        nullable=True,
+        nullable=False,
     )
 
     finished_at = Column(
