@@ -3,6 +3,8 @@
 from datetime import datetime, timezone
 from decimal import Decimal
 
+from flask_sqlalchemy import session
+
 from app.models.session import Session
 
 
@@ -38,11 +40,14 @@ def validate_positive_int(value):
     Valida se o valor é um inteiro positivo.
     """
 
-    if not isinstance(value, int) or value <= 0:
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, int)
+        or value <= 0
+    ):
         raise ValueError(
             "O valor deve ser um número inteiro positivo"
         )
-
 
 def validate_session_type(session_type):
     """
@@ -248,9 +253,20 @@ def resume_session(db, session_id, user_id):
     return session
 
 
-def finish_session(db, session_id, user_id):
+def finish_session(
+    db,
+    session_id,
+    user_id,
+    questions_total=None,
+    questions_correct=None,
+    questions_total_provided=False,
+    questions_correct_provided=False,
+):
     """
     Finaliza uma sessão em execução ou pausada.
+
+    Sessões de questões e simulados exigem
+    questions_total. questions_correct é opcional.
     """
 
     validate_positive_int(session_id)
@@ -265,6 +281,39 @@ def finish_session(db, session_id, user_id):
         return None
 
     validate_finishable_session(session)
+
+    if session.session_type not in QUESTION_SESSION_TYPES:
+        if (
+            questions_total_provided
+            or questions_correct_provided
+        ):
+            raise ValueError(
+                "Campos de questões são permitidos apenas "
+                "para sessões de questões ou simulados"
+            )
+
+    else:
+        validate_positive_int(questions_total)
+
+        if questions_correct is not None:
+            if (
+                isinstance(questions_correct, bool)
+                or not isinstance(questions_correct, int)
+                or questions_correct < 0
+            ):
+                raise ValueError(
+                    "questions_correct deve ser um número "
+                    "inteiro não negativo"
+                )
+
+            if questions_correct > questions_total:
+                raise ValueError(
+                    "questions_correct não pode ser maior "
+                    "que questions_total"
+                )
+
+        session.questions_total = questions_total
+        session.questions_correct = questions_correct
 
     now = utc_now()
 

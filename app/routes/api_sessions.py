@@ -261,12 +261,22 @@ def finish_session():
 
     session_id = data.get("session_id")
 
+    questions_total_provided = "questions_total" in data
+    questions_correct_provided = "questions_correct" in data
+
+    questions_total = data.get("questions_total")
+    questions_correct = data.get("questions_correct")
+
     with SessionLocal() as db:
         try:
             session = finish_session_service(
                 db=db,
                 session_id=session_id,
                 user_id=user_id,
+                questions_total=questions_total,
+                questions_correct=questions_correct,
+                questions_total_provided=questions_total_provided,
+                questions_correct_provided=questions_correct_provided,
             )
         except ValueError as error:
             return jsonify(
