@@ -65,7 +65,8 @@ Não criar uma V3 para problemas pertencentes à V2.
 - modelo temporal normalizado em UTC;
 - cálculo determinístico da duração líquida;
 - tratamento consistente de pausas acumuladas;
-- testes temporais determinísticos.
+- testes temporais determinísticos;
+- contrato QT/QC implementado em `POST /api/sessions/finish` e validado.
 
 ### Último checkpoint conhecido
 
@@ -111,7 +112,22 @@ Estado validado:
 - 90 testes aprovados na suíte completa;
 - nenhuma regressão identificada.
 
-Próximo passo: **BLOCO 5 — Contrato final da API**.
+O BLOCO 5 está em andamento. A etapa de finalização de sessões definiu:
+
+- `questions` e `mock_exam` exigem `questions_total` inteiro positivo;
+- `questions_correct` é opcional: `null` representa correção pendente,
+  `0` representa zero acertos, e valores inteiros devem estar entre 0 e QT;
+- valores booleanos, fracionários, negativos e strings são rejeitados;
+- `study`, `revision` e `essay` rejeitam campos QT/QC no payload,
+  inclusive quando enviados explicitamente como `null`;
+- as validações ocorrem antes de finalizar e persistir a sessão.
+
+Validação mais recente: 28 testes específicos de `/finish` e 112 testes
+na suíte completa, todos aprovados. `git diff --check` sem problemas.
+O commit dessa etapa ainda precisa ser confirmado.
+
+Próximo passo: concluir o commit de `/finish` e implementar
+`PATCH /api/sessions/<session_id>` para edição de resultados.
 
 O frontend permanece posterior ao congelamento do MVP do backend.
 
@@ -155,42 +171,68 @@ Validação:
 - `tests/test_session_time.py`: 12 testes aprovados;
 - suíte completa: 90 testes aprovados.
 
-**Commit: PENDENTE — alterações concluídas e testadas.**
+Commit: `1e7a52d` (`refactor: harden session time handling`).
 
 ### BLOCO 5 — Contrato final da API
 
-**PLANEJADO**
+**EM ANDAMENTO**
 
-Revisar e congelar o contrato final do MVP, incluindo:
+**Etapa concluída e testada — `POST /api/sessions/finish`:**
 
-- resíduos de integração entre Session e Goal;
-- comportamento de `questions` e `mock_exam`;
-- serialização;
-- listagem;
-- filtros e ordenação;
-- paginação, se necessária;
-- erros e mensagens;
-- documentação final da API;
-- revisão final de segurança;
-- congelamento do backend MVP.
+- QT obrigatório, inteiro positivo, para `questions` e `mock_exam`;
+- QC opcional, aceitando `null` ou inteiro de 0 até QT;
+- rejeição de valores inválidos, inclusive `bool`;
+- rejeição de QT/QC em `study`, `revision` e `essay`, mesmo se `null`;
+- preservação das verificações existentes de autenticação, ownership e
+  transições de estado.
+
+Validação: 28 testes específicos aprovados; suíte completa com
+**112 testes aprovados** (18,12 s); `git diff --check` sem problemas.
+
+**Commit da etapa `/finish`: CONFIRMADO **
+[main 1d40491] feat: validate question results on session finish
+
+**Próxima implementação — `PATCH /api/sessions/<session_id>`:**
+
+- editar apenas QT/QC de sessões `finished` dos tipos `questions` e
+  `mock_exam`;
+- exigir JWT e ownership; recurso ausente ou alheio retorna 404;
+- rejeitar campos desconhecidos e payload vazio;
+- campos omitidos permanecem inalterados;
+- QT não aceita `null`; QC aceita `null` para correção pendente;
+- validar QT/QC resultantes em conjunto, inclusive impedir QT menor que
+  QC já armazenado.
+
+**Ainda pendente no BLOCO 5:**
+
+- definir e implementar constraint de integridade QT/QC no banco e migration;
+- revisar resíduos de integração entre Session e Goal;
+- revisar serialização, listagem, filtros e ordenação;
+- decidir paginação, se necessária;
+- consolidar erros, mensagens e documentação final da API;
+- realizar revisão final de segurança, incluindo Goal e JWT/cookies/CSRF;
+- congelar o backend MVP antes de avançar para o frontend.
 
 
 ## 6. Pendências / A DEFINIR
 
-- tratamento definitivo de `goal_id` legado;
-- regras finais de `questions`/`mock_exam`;
-- listagem, filtros, ordenação e paginação;
-- catálogo definitivo de erros/mensagens;
-- revisão final de JWT/cookies/CSRF;
-- contrato final da API antes do frontend.
+- **PENDENTE:** implementação e testes do `PATCH` de resultados;
+- **PENDENTE:** constraint QT/QC no banco e migration Alembic;
+- **PENDENTE / A DEFINIR:** tratamento definitivo de `goal_id` legado;
+- **PENDENTE / A DEFINIR:** listagem, filtros, ordenação e paginação;
+- **PENDENTE / A DEFINIR:** catálogo definitivo de erros/mensagens;
+- **PENDENTE:** revisão final de JWT/cookies/CSRF e segurança de Goal;
+- **PENDENTE:** documentação e congelamento do contrato final da API;
+- **PENDENTE DE CONFIRMAÇÃO:** commit da implementação de `/finish`.
 
-A política temporal que anteriormente estava pendente foi definida no
-BLOCO 4:
+**Decisões já fechadas (não reabrir sem motivo técnico):**
 
-- UTC como padrão;
+- UTC como padrão temporal;
 - `duration_hours` como duração líquida persistida;
 - `paused_seconds` como acumulador das pausas;
-- cálculo temporal determinístico e normalizado.
+- cálculo temporal determinístico e normalizado;
+- QT/QC de `/finish` conforme as regras registradas no BLOCO 5;
+- `PATCH` restrito a resultados de sessões finalizadas, conforme acima.
 
 
 ## 7. Fonte de verdade e continuidade
