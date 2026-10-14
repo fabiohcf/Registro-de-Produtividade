@@ -2,270 +2,294 @@
 
 ## 1. Identidade
 
-**Projeto:** Registro de Produtividade V2
+**Projeto:** Registro de Produtividade V2.
 
-Aplicação web para registrar sessões de produtividade, controlar tempo,
-armazenar histórico e futuramente oferecer consultas e relatórios.
+Aplicação web para registrar sessões de produtividade, controlar o tempo líquido de atividade, armazenar histórico e, futuramente, oferecer consultas e relatórios.
 
-A V2 é a evolução profissional do projeto simplificado original, com
-finalidade de portfólio e potencial de comercialização.
+A V2 é a evolução profissional do projeto simplificado original, com finalidade de portfólio e potencial de comercialização. Não criar uma V3 para resolver problemas pertencentes à V2.
 
+## 2. Objetivo e estratégia
 
-## 2. Objetivo
+Construir um backend profissional, seguro, consistente e testado antes de desenvolver ou integrar definitivamente o frontend.
 
-Construir primeiro um backend profissional, consistente, testado e seguro.
-O backend é a fonte da verdade para o frontend posterior.
+Sequência de trabalho:
 
-Fluxo:
+1. Consolidar o domínio de sessões.
+2. Garantir segurança e integridade dos dados.
+3. Validar o comportamento por testes automatizados.
+4. Consolidar e congelar o contrato do MVP do backend.
+5. Desenvolver ou refinar o frontend com base no contrato validado.
 
-1. consolidar o domínio;
-2. garantir integridade e segurança;
-3. testar;
-4. congelar o MVP do backend;
-5. somente então construir/refinar o frontend.
+O backend é a fonte de verdade para o frontend.
 
-Não criar uma V3 para problemas pertencentes à V2.
-
-
-## 3. Stack
+## 3. Stack e arquitetura
 
 ### Backend
 
-- Python 3.12
-- Flask
-- SQLAlchemy ORM
-- Alembic
-- PostgreSQL em produção
-- SQLite para testes
-- pytest
-- Flask-JWT-Extended
+- Python 3.12;
+- Flask;
+- SQLAlchemy ORM com gerenciamento explícito de sessões, sem Flask-SQLAlchemy como camada de persistência;
+- Alembic para migrations;
+- PostgreSQL em produção;
+- SQLite em memória nos testes;
+- pytest;
+- Flask-JWT-Extended, com JWT em cookies.
 
 ### Frontend planejado
 
-- React
-- TypeScript
-- Vite
-- Tailwind CSS
-- shadcn/ui
+- React;
+- TypeScript;
+- Vite;
+- Tailwind CSS;
+- shadcn/ui.
 
+### Responsabilidades das camadas
+
+- **Routes/API:** requisições e respostas HTTP, autenticação, identidade do JWT, validação de formato do payload, status HTTP, serialização e logging aplicável.
+- **Services:** regras de negócio, transições de estado, ownership e persistência; independentes de Flask.
+- **Models:** entidades SQLAlchemy e restrições estruturais.
+- **Database:** engine, `Base` e `SessionLocal`.
+- **Tests:** regras de domínio, comportamento da API, segurança e regressões.
+
+Operações de sessão: `app/routes/session_service.py`.
+
+Rotas e serialização de sessões: `app/routes/api_sessions.py`, incluindo `_serialize_session()`.
+
+Os testes de API de sessões são separados por endpoint. Os fixtures de testes isolam os dados com criação e remoção do esquema em SQLite.
 
 ## 4. Estado atual
 
-### Concluído
+**Estado do backend:** Blocos 1, 2, 3 e 4 concluídos. Bloco 5 em andamento.
 
-- gerenciamento explícito de sessões SQLAlchemy;
-- separação dos testes de API de sessões por endpoint;
-- hardening da API de sessões com JWT e ownership;
-- identidade derivada exclusivamente do JWT;
-- operações de sessão concentradas em `session_service.py`;
-- service independente de Flask;
-- serialização mantida na camada de API;
-- constraints de integridade do domínio de sessão no banco;
-- garantia de uma única sessão ativa por usuário no banco;
-- modelo temporal normalizado em UTC;
-- cálculo determinístico da duração líquida;
-- tratamento consistente de pausas acumuladas;
-- testes temporais determinísticos;
-- contrato QT/QC implementado em `POST /api/sessions/finish` e validado;
-- PATCH /api/sessions/<session_id> implementadoe validado.
+**Último checkpoint confirmado:** implementação, testes, documentação e commit do endpoint `PATCH /api/sessions/<session_id>`.
 
-### Último checkpoint conhecido
+**Última suíte completa executada:** **152 testes aprovados** em 26,03 segundos, sem falhas.
 
-Os BLOCOs 1, 2, 3 e 4 do hardening do backend estão concluídos.
+**Git:** commit `7aacb34` confirmado; branch `main` sincronizada com `origin/main`; diretório de trabalho limpo no último `git status` informado.
 
-O BLOCO 3 adicionou garantias de integridade ao banco:
+### Funcionalidades e garantias concluídas
 
-- `status` restrito a `running`, `paused` e `finished`;
-- `session_type` restrito aos tipos válidos do domínio;
-- coerência entre status, `paused_at` e `finished_at`;
-- `started_at` obrigatório;
-- valores temporais e quantitativos não negativos;
-- índice único parcial `uq_session_active_per_user`, garantindo uma única
-  sessão `running` ou `paused` por usuário.
+- Gerenciamento explícito de sessões SQLAlchemy.
+- Autenticação JWT nas operações de sessão.
+- Identidade obtida exclusivamente do JWT, sem confiar em `user_id` do cliente.
+- Ownership para operações por `session_id`, com HTTP 404 para sessão inexistente ou pertencente a outro usuário.
+- Regras de domínio e persistência concentradas no service.
+- Serialização JSON mantida na camada de API.
+- Máquina de estados de sessões validada.
+- Exclusividade de uma sessão ativa por usuário garantida também no banco.
+- Constraints de integridade de status, tipo, timestamps e valores não negativos.
+- Tempo padronizado em UTC, com normalização de datetimes.
+- Cálculo determinístico de duração líquida e de pausas acumuladas.
+- Validação QT/QC na finalização de sessões de questões e simulados.
+- Edição segura e parcial de QT/QC por PATCH em sessões finalizadas.
+- Testes específicos e suíte completa aprovados.
 
-A migration
-`f8de7633e97d_add_session_integrity_constraints.py` foi validada no
-PostgreSQL com upgrade, downgrade e novo upgrade.
+### Domínio consolidado
 
-Os testes são explicitamente isolados em SQLite em memória.
+**Estados:** `running`, `paused`, `finished` e `cancelled` (conceitual; cancelamento remove fisicamente a sessão).
 
-O BLOCO 4 consolidou o modelo temporal:
+**Transições permitidas:**
 
-- UTC é o padrão temporal do domínio;
-- `ensure_utc()` normaliza datetimes e trata valores naive retornados pelo
-  SQLite como UTC;
-- `utc_now()` centraliza a obtenção do horário atual e permite testes
-  determinísticos;
-- `duration_hours` permanece como representação persistida da duração
-  líquida ativa;
-- `paused_seconds` acumula o tempo total pausado;
-- o cálculo da duração desconta integralmente as pausas;
-- cálculos com `Decimal` evitam introduzir imprecisão pela conversão direta
-  de `float`;
-- duração líquida nunca é persistida como valor negativo;
-- múltiplas pausas foram validadas deterministicamente;
-- finalização durante uma pausa contabiliza corretamente a pausa ainda
-  aberta.
+- `running` → `paused`, `finished` ou `cancelled`;
+- `paused` → `running`, `finished` ou `cancelled`.
 
-Estado validado:
+Sessões `finished` não voltam a estados ativos e não podem ser canceladas pelas operações de sessão existentes. A edição de QT/QC de uma sessão finalizada não modifica seu estado.
 
-- 12 testes específicos do modelo temporal aprovados;
-- 90 testes aprovados na suíte completa;
-- nenhuma regressão identificada.
+**Tipos:** `study`, `revision`, `questions`, `essay` e `mock_exam`.
 
-O BLOCO 5 está em andamento. A etapa de finalização de sessões definiu:
+**Sessão ativa:** apenas `running` ou `paused`; no máximo uma por usuário.
 
-- `questions` e `mock_exam` exigem `questions_total` inteiro positivo;
-- `questions_correct` é opcional: `null` representa correção pendente,
-  `0` representa zero acertos, e valores inteiros devem estar entre 0 e QT;
-- valores booleanos, fracionários, negativos e strings são rejeitados;
-- `study`, `revision` e `essay` rejeitam campos QT/QC no payload,
-  inclusive quando enviados explicitamente como `null`;
-- as validações ocorrem antes de finalizar e persistir a sessão.
+**Tempo:** `duration_hours` armazena a duração líquida ativa, excluindo pausas; `paused_seconds` acumula os segundos pausados.
 
-Validação mais recente: 28 testes específicos de `/finish` e 112 testes
-na suíte completa, todos aprovados. `git diff --check` sem problemas.
-O commit dessa etapa ainda precisa ser confirmado.
+**Goal:** Session V2 não possui relacionamento com Goal e não usa `goal_id` para controlar sessões. A revisão dos resíduos legados permanece pendente.
 
-Próximo passo: concluir o commit de `/finish` e implementar
-`PATCH /api/sessions/<session_id>` para edição de resultados.
-
-O frontend permanece posterior ao congelamento do MVP do backend.
-
-> ⚠️ **COMMIT:** após concluir e testar um processo, revisar
-> `git diff`/`git status` e fazer commit com mensagem clara.
-
-
-## 5. Roadmap
+## 5. Roadmap e checkpoints
 
 ### BLOCO 1 — Segurança da API
 
 **CONCLUÍDO**
 
-JWT, ownership, identidade exclusivamente pelo JWT e testes de segurança.
+- JWT obrigatório nas operações de sessão.
+- Identidade exclusivamente pelo JWT.
+- Verificação de ownership.
+- HTTP 404 para recurso inexistente ou pertencente a outro usuário.
+- Testes de autenticação e isolamento entre usuários.
 
-### BLOCO 2 — Domínio / Service Layer
+A revisão final de JWT/cookies/CSRF e da segurança de Goal permanece pendente antes do congelamento do MVP; isso não reabre a implementação já concluída das proteções de sessão.
+
+### BLOCO 2 — Domínio e Service Layer
 
 **CONCLUÍDO**
 
-Operações de sessão concentradas no service, independente de Flask.
+- Operações `start`, `pause`, `resume`, `finish` e `cancel` centralizadas no service.
+- Transições de estado explícitas.
+- Separação entre regras de negócio e tratamento HTTP.
+- Services independentes de `request` e `jsonify`.
 
-Commit: `b5743cd`
+**Commit:** `b5743cd` — `refactor: move session operations to service layer`.
 
 ### BLOCO 3 — Integridade do banco
 
 **CONCLUÍDO**
 
-Constraints, invariantes temporais, índice único parcial, Alembic e testes.
+Garantias implementadas:
 
-Commit: `5560ce1`
+- `status` restrito a `running`, `paused` e `finished` no banco;
+- `session_type` restrito aos cinco tipos válidos;
+- coerência entre `status`, `paused_at` e `finished_at`;
+- `started_at` obrigatório;
+- `paused_seconds`, `duration_hours`, `questions_total` e `questions_correct` não negativos quando aplicáveis;
+- índice único parcial `uq_session_active_per_user` para impedir duas sessões ativas por usuário.
+
+A migration `f8de7633e97d_add_session_integrity_constraints.py` foi validada em PostgreSQL com upgrade, downgrade e novo upgrade.
+
+**Commit:** `5560ce1` — `feat: enforce session database integrity`.
+
+**Limite conhecido:** as constraints existentes ainda não expressam integralmente a relação entre QT, QC, tipo e status. Esse complemento é uma etapa pendente do Bloco 5.
 
 ### BLOCO 4 — Tempo
 
 **CONCLUÍDO**
 
-UTC, normalização de datetimes, precisão de duração, duração líquida,
-pausas acumuladas e testes temporais determinísticos.
+- UTC como padrão temporal do domínio.
+- `ensure_utc()` para normalizar datetimes, tratando como UTC valores naive retornados pelo SQLite.
+- `utc_now()` para centralizar o horário atual e permitir testes determinísticos.
+- Persistência de duração líquida em `duration_hours`.
+- Acúmulo de pausas em `paused_seconds`.
+- Cálculo de duração descontando todas as pausas, inclusive a pausa aberta no momento da finalização.
+- Uso de `Decimal` para evitar imprecisões decorrentes de conversões diretas de `float`.
+- Duração líquida nunca negativa.
+- Testes determinísticos de múltiplas pausas e finalização durante pausa.
 
-Validação:
+**Checkpoint histórico:** 12 testes temporais específicos e 90 testes na suíte completa aprovados.
 
-- `tests/test_session_time.py`: 12 testes aprovados;
-- suíte completa: 90 testes aprovados.
-
-Commit: `1e7a52d` (`refactor: harden session time handling`).
+**Commit:** `1e7a52d` — `refactor: harden session time handling`.
 
 ### BLOCO 5 — Contrato final da API
 
 **EM ANDAMENTO**
 
-**Etapa concluída e testada — `POST /api/sessions/finish`:**
+#### Etapa concluída — `POST /api/sessions/finish`
 
-- QT obrigatório, inteiro positivo, para `questions` e `mock_exam`;
-- QC opcional, aceitando `null` ou inteiro de 0 até QT;
-- rejeição de valores inválidos, inclusive `bool`;
-- rejeição de QT/QC em `study`, `revision` e `essay`, mesmo se `null`;
-- preservação das verificações existentes de autenticação, ownership e
-  transições de estado.
+- `questions` e `mock_exam` exigem `questions_total` inteiro positivo.
+- `questions_correct` aceita `null` (correção pendente) ou inteiro de 0 até QT.
+- Booleanos, frações, números negativos e strings são rejeitados nos campos numéricos.
+- `study`, `revision` e `essay` rejeitam QT/QC no payload, inclusive quando explicitamente enviados como `null`.
+- Validações ocorrem antes da finalização e persistência.
+- Permanecem as verificações de JWT, ownership e estado da sessão.
 
-Validação: 28 testes específicos aprovados; suíte completa com
-**112 testes aprovados** (18,12 s); `git diff --check` sem problemas.
+**Validação:** 28 testes específicos de `/finish` aprovados; checkpoint histórico de 112 testes na suíte completa.
 
-**Commit da etapa `/finish`: CONFIRMADO **
-[main 1d40491] feat: validate question results on session finish
+**Commit:** `1d40491` — `feat: validate question results on session finish`.
 
-**Etapa concluída e testada — `PATCH /api/sessions/<session_id>`:**
+**Commit documental relacionado:** `b41a7c4` — `docs: update project overview with block 5 progress`.
 
-- editar apenas QT/QC de sessões `finished` dos tipos `questions` e
-  `mock_exam`;
-- exigir JWT e ownership; recurso ausente ou alheio retorna 404;
-- rejeitar campos desconhecidos e payload vazio;
-- campos omitidos permanecem inalterados;
-- QT não aceita `null`; QC aceita `null` para correção pendente;
-- validar QT/QC resultantes em conjunto, inclusive impedir QT menor que
-  QC já armazenado;
-- 40 testes específicos do PATCH aprovados;
-- 152 testes da suíte completa aprovados.
+#### Etapa concluída — `PATCH /api/sessions/<session_id>`
 
-**Ainda pendente no BLOCO 5:**
+- Atualiza exclusivamente `questions_total` e `questions_correct`.
+- Permite edição apenas em sessões `finished` dos tipos `questions` e `mock_exam`.
+- Exige JWT e obtém a identidade exclusivamente do token.
+- Verifica ownership; sessão inexistente ou alheia retorna HTTP 404.
+- Rejeita campos desconhecidos, mesmo combinados com campos válidos.
+- Rejeita payload vazio ou que não seja objeto JSON.
+- Preserva campos omitidos.
+- Exige QT inteiro positivo; não aceita QT `null`.
+- Permite QC `null` (correção pendente) ou inteiro de zero até QT.
+- Rejeita valores booleanos, fracionários, negativos e strings.
+- Valida QT e QC resultantes em conjunto, inclusive ao reduzir QT quando QC já está armazenado.
+- Preserva `status`, `session_type`, `started_at`, `finished_at`, `duration_hours` e `paused_seconds`.
+- Mantém validação de domínio no service e resposta HTTP na rota.
 
-- definir e implementar constraint de integridade QT/QC no banco e migration;
-- revisar resíduos de integração entre Session e Goal;
-- revisar serialização, listagem, filtros e ordenação;
-- decidir paginação, se necessária;
-- consolidar erros, mensagens e documentação final da API;
-- realizar revisão final de segurança, incluindo Goal e JWT/cookies/CSRF;
-- congelar o backend MVP antes de avançar para o frontend.
+**Validação:** 40 testes específicos do PATCH aprovados; **152 testes na suíte completa** aprovados, sem regressões identificadas; `git diff --check` sem problemas.
 
+**Commit:** `7aacb34` — `feat: add secure patch endpoint for session results`.
 
-## 6. Pendências / A DEFINIR
+**Situação do Git após o checkpoint:** `main` atualizada com `origin/main`; working tree clean.
 
-- **PENDENTE:** constraint QT/QC no banco e migration Alembic;
-- **PENDENTE / A DEFINIR:** tratamento definitivo de `goal_id` legado;
-- **PENDENTE / A DEFINIR:** listagem, filtros, ordenação e paginação;
-- **PENDENTE / A DEFINIR:** catálogo definitivo de erros/mensagens;
-- **PENDENTE:** revisão final de JWT/cookies/CSRF e segurança de Goal;
-- **PENDENTE:** documentação e congelamento do contrato final da API;
-- **PENDENTE DE CONFIRMAÇÃO:** commit da implementação de `/finish`.
+#### Etapas restantes do Bloco 5
 
-**Decisões já fechadas (não reabrir sem motivo técnico):**
+- **PENDENTE:** definir as invariantes definitivas QT/QC no banco, criar constraints e migration Alembic e testar no PostgreSQL e SQLite.
+- **PENDENTE:** revisar resíduos legados de integração entre Session e Goal, sem reintroduzir `goal_id` no domínio de sessões.
+- **PENDENTE / A DEFINIR:** consolidar comportamento e contrato de listagem, filtros e ordenação com base no código real.
+- **PENDENTE / A DEFINIR:** decidir se paginação é necessária ao MVP.
+- **PENDENTE:** revisar serialização, erros e mensagens da API; consolidar o contrato final.
+- **PENDENTE:** revisão final de segurança, incluindo Goal, JWT, cookies e CSRF.
+- **PENDENTE:** atualizar documentação final e congelar o backend MVP.
 
-- UTC como padrão temporal;
-- `duration_hours` como duração líquida persistida;
-- `paused_seconds` como acumulador das pausas;
-- cálculo temporal determinístico e normalizado;
-- QT/QC de `/finish` conforme as regras registradas no BLOCO 5;
-- `PATCH` restrito a resultados de sessões finalizadas, conforme acima.
+## 6. Contrato conhecido da API de sessões
 
+Endpoints implementados e conhecidos:
 
-## 7. Fonte de verdade e continuidade
+- `POST /api/sessions/start` — inicia sessão; sucesso HTTP 201.
+- `POST /api/sessions/pause` — pausa sessão `running`; sucesso HTTP 200.
+- `POST /api/sessions/resume` — retoma sessão `paused`; sucesso HTTP 200.
+- `POST /api/sessions/finish` — finaliza sessão ativa, validando QT/QC conforme o tipo; sucesso HTTP 200.
+- `POST /api/sessions/cancel` — remove fisicamente sessão ativa; sucesso HTTP 200.
+- `GET /api/sessions/list` — lista sessões do usuário autenticado; contrato definitivo de filtros e ordenação ainda sujeito a revisão.
+- `PATCH /api/sessions/<session_id>` — edita parcialmente QT/QC de sessão finalizada de questões ou simulado; sucesso HTTP 200.
 
-Git é a fonte de verdade do código.
+Todos os endpoints de sessão exigem JWT. Para operações sobre sessões existentes, o service verifica ownership.
 
-A documentação persistente registra decisões, arquitetura e estado do
-projeto.
+Serialização conhecida de sessões: `id`, `user_id`, `status`, `session_type`, `description`, `started_at`, `finished_at`, `duration_hours`, `paused_seconds`, `questions_total` e `questions_correct`.
 
-`PROJECT_OVERVIEW.md` é o retrato resumido e evolutivo do estado do projeto
-e deve permanecer versionado no repositório.
+Datas são serializadas com `isoformat()`; a resposta atual converte `duration_hours` para `float`.
 
-A cópia disponibilizada nas fontes do Projeto no ChatGPT deve ser
-atualizada nos checkpoints relevantes para facilitar a continuidade entre
-conversas.
+O padrão conhecido de erro é JSON com campo `error`. O catálogo definitivo de mensagens e códigos permanece sujeito à revisão do Bloco 5.
 
-Quando houver divergência entre memória de conversa e código real,
-verificar o estado do Git antes de concluir.
+**Nota de consistência documental:** as fontes `API_CONTRACT.md`, `DOMAIN_RULES.md`, `ARCHITECTURE.md` e `SECURITY.md` contêm alguns checkpoints e trechos prospectivos anteriores à conclusão dos Blocos 3, 4 e das etapas QT/QC do Bloco 5. Atualizá-las em checkpoint próprio, preservando decisões já fechadas. Em caso de divergência, conferir o Git e o código real.
 
+## 7. Pendências e decisões fechadas
 
-## 8. Atualização obrigatória
+### Pendências prioritárias
 
-> ⚠️ **ATUALIZAR `PROJECT_OVERVIEW.md` APÓS ETAPAS IMPORTANTES:** revisar
-> este documento quando um bloco for concluído, uma decisão importante for
-> fechada, houver mudança arquitetural relevante ou outro checkpoint
-> significativo.
+1. **Integridade QT/QC no banco:** analisar invariantes, migration e testes, sem misturar com outras mudanças.
+2. **Resíduos de Goal:** examinar o código real antes de decidir alterações.
+3. **Listagem e contrato da API:** revisar comportamento existente, filtros, ordenação, paginação e erros.
+4. **Segurança pré-MVP:** revisar JWT/cookies/CSRF e endpoints de Goal.
+5. **Congelamento do MVP:** atualizar documentação final e validar a suíte completa antes de iniciar o frontend.
 
-Não atualizar a cada pequena alteração. O objetivo é manter um estado atual
-confiável.
+### Decisões já fechadas
 
-Processo padrão:
+- Continuar na V2, sem criar V3.
+- Backend como fonte de verdade do frontend.
+- SQLAlchemy ORM com sessões explícitas; services sem dependência de Flask.
+- Identidade exclusivamente pelo JWT; ownership obrigatório.
+- Sessão inexistente ou alheia retorna 404.
+- Uma única sessão ativa por usuário, com garantia no banco.
+- UTC como padrão temporal.
+- `duration_hours` como duração líquida persistida; `paused_seconds` como acumulador de pausas.
+- Sessões canceladas são excluídas fisicamente.
+- Session V2 não possui relacionamento com Goal.
+- Regras QT/QC de `/finish` e PATCH conforme documentadas no Bloco 5.
+- Frontend somente após estabilização e congelamento do backend MVP.
 
-**entender → alterar → testar especificamente → suíte completa → revisar
-Git → commit → atualizar Overview no checkpoint.**
+Não inventar requisitos, filtros, mensagens ou regras não decididos. Registrar o que não estiver fechado como **PENDENTE / A DEFINIR**.
+
+## 8. Fonte de verdade e continuidade
+
+- **Git:** fonte de verdade do código.
+- **Documentação persistente do Projeto:** fonte de verdade das decisões, arquitetura e estado registrado.
+- **Backend:** fonte de verdade para o frontend.
+
+Em caso de divergência entre memória de conversa, documentação e código, verificar o repositório Git antes de concluir.
+
+O `PROJECT_OVERVIEW.md` é o registro resumido e evolutivo do projeto. Deve ser versionado no repositório e atualizado nas fontes do Projeto no ChatGPT após checkpoints relevantes.
+
+### Processo padrão de desenvolvimento
+
+1. Entender o estado real e identificar os arquivos afetados.
+2. Definir uma alteração pequena e verificável.
+3. Implementar.
+4. Executar os testes específicos.
+5. Executar a suíte completa ao integrar o bloco.
+6. Revisar `git diff`, `git diff --check` e `git status`.
+7. Realizar commit com mensagem clara.
+8. Atualizar a documentação no checkpoint e sincronizar o remoto quando apropriado.
+
+> **LEMBRETE — COMMIT:** após concluir e testar um processo, revisar o Git e registrar um commit claro.
+
+> **LEMBRETE — DOCUMENTAÇÃO:** atualizar `PROJECT_OVERVIEW.md` após blocos concluídos, decisões relevantes e checkpoints importantes. Não é necessário reescrevê-lo a cada pequena alteração.
+
+### Próxima ação de desenvolvimento
+
+Iniciar a análise da integridade QT/QC no banco, verificando o estado real das migrations Alembic e das constraints existentes antes de modificar código.
