@@ -9,6 +9,7 @@ from app.routes.session_service import (
     pause_session as pause_session_service,
     resume_session as resume_session_service,
     finish_session as finish_session_service,
+    update_session_results as update_session_results_service,
     cancel_session as cancel_session_service,
     list_sessions as list_sessions_service,
 )
@@ -303,6 +304,80 @@ def finish_session():
             ),
             200,
         )
+
+# ==========================================================
+# UPDATE SESSION RESULTS
+# ==========================================================
+
+@bp_sessions.route("/<int:session_id>", methods=["PATCH"])
+@jwt_required()
+def update_session_results(session_id):
+    """
+    Atualiza QT/QC de sessões finalizadas.
+    """
+
+    user_id = _get_authenticated_user_id()
+
+    if user_id is None:
+        return jsonify(
+            {"error": "Identidade de usuário inválida"}
+        ), 401
+
+    data = request.get_json(silent=True)
+
+    if not isinstance(data, dict) or not data:
+        return jsonify(
+            {"error": "Dados JSON são obrigatórios"}
+        ), 400
+
+    allowed_fields = {
+        "questions_total",
+        "questions_correct",
+    }
+
+    unknown_fields = set(data) - allowed_fields
+
+    if unknown_fields:
+        return jsonify(
+            {"error": "Campos não permitidos na atualização"}
+        ), 400
+
+    questions_total_provided = "questions_total" in data
+    questions_correct_provided = "questions_correct" in data
+
+    with SessionLocal() as db:
+        try:
+            session = update_session_results_service(
+                db=db,
+                session_id=session_id,
+                user_id=user_id,
+                questions_total=data.get("questions_total"),
+                questions_correct=data.get("questions_correct"),
+                questions_total_provided=questions_total_provided,
+                questions_correct_provided=questions_correct_provided,
+            )
+        except ValueError as error:
+            return jsonify(
+                {"error": str(error)}
+            ), 400
+
+        if session is None:
+            return jsonify(
+                {"error": "Sessão não encontrada"}
+            ), 404
+
+        log_action(
+            session.user_id,
+            session.id,
+            "update_results",
+        )
+
+        return jsonify(
+            {
+                "message": "Resultados atualizados com sucesso.",
+                "session": _serialize_session(session),
+            }
+        ), 200
 
 
 # ==========================================================

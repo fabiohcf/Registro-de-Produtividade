@@ -134,6 +134,37 @@ def validate_finishable_session(session):
         )
 
 
+def validate_question_results(
+    questions_total,
+    questions_correct,
+):
+    """
+    Valida os resultados de sessões de questões
+    e simulados.
+
+    QT deve ser inteiro positivo.
+    QC pode ser None ou inteiro entre zero e QT.
+    """
+
+    validate_positive_int(questions_total)
+
+    if questions_correct is not None:
+        if (
+            isinstance(questions_correct, bool)
+            or not isinstance(questions_correct, int)
+            or questions_correct < 0
+        ):
+            raise ValueError(
+                "questions_correct deve ser um número "
+                "inteiro não negativo"
+            )
+
+        if questions_correct > questions_total:
+            raise ValueError(
+                "questions_correct não pode ser maior "
+                "que questions_total"
+            )
+
 # ==========================================================
 # Session operations
 # ==========================================================
@@ -335,6 +366,71 @@ def finish_session(
         now,
         session.paused_seconds,
     )
+
+    db.commit()
+    db.refresh(session)
+
+    return session
+
+
+def update_session_results(
+    db,
+    session_id,
+    user_id,
+    questions_total=None,
+    questions_correct=None,
+    questions_total_provided=False,
+    questions_correct_provided=False,
+):
+    """
+    Atualiza os resultados de uma sessão finalizada.
+
+    Campos omitidos preservam os valores existentes.
+    QC pode ser None para indicar correção pendente.
+    """
+
+    validate_positive_int(session_id)
+
+    session = get_user_session(
+        db,
+        session_id,
+        user_id,
+    )
+
+    if session is None:
+        return None
+
+    if session.status != "finished":
+        raise ValueError(
+            "Somente sessões finalizadas podem ter "
+            "seus resultados editados."
+        )
+
+    if session.session_type not in QUESTION_SESSION_TYPES:
+        raise ValueError(
+            "Somente sessões de questões ou simulados "
+            "podem ter seus resultados editados."
+        )
+
+    new_total = (
+        questions_total
+        if questions_total_provided
+        else session.questions_total
+    )
+
+    new_correct = (
+        questions_correct
+        if questions_correct_provided
+        else session.questions_correct
+    )
+
+    validate_question_results(
+        new_total,
+        new_correct,
+    )
+
+    session.questions_total = new_total
+    session.questions_correct = new_correct
 
     db.commit()
     db.refresh(session)

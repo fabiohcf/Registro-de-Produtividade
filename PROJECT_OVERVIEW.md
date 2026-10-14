@@ -66,7 +66,8 @@ Não criar uma V3 para problemas pertencentes à V2.
 - cálculo determinístico da duração líquida;
 - tratamento consistente de pausas acumuladas;
 - testes temporais determinísticos;
-- contrato QT/QC implementado em `POST /api/sessions/finish` e validado.
+- contrato QT/QC implementado em `POST /api/sessions/finish` e validado;
+- PATCH /api/sessions/<session_id> implementadoe validado.
 
 ### Último checkpoint conhecido
 
@@ -192,7 +193,7 @@ Validação: 28 testes específicos aprovados; suíte completa com
 **Commit da etapa `/finish`: CONFIRMADO **
 [main 1d40491] feat: validate question results on session finish
 
-**Próxima implementação — `PATCH /api/sessions/<session_id>`:**
+**Etapa concluída e testada — `PATCH /api/sessions/<session_id>`:**
 
 - editar apenas QT/QC de sessões `finished` dos tipos `questions` e
   `mock_exam`;
@@ -201,7 +202,9 @@ Validação: 28 testes específicos aprovados; suíte completa com
 - campos omitidos permanecem inalterados;
 - QT não aceita `null`; QC aceita `null` para correção pendente;
 - validar QT/QC resultantes em conjunto, inclusive impedir QT menor que
-  QC já armazenado.
+  QC já armazenado;
+- 40 testes específicos do PATCH aprovados;
+- 152 testes da suíte completa aprovados.
 
 **Ainda pendente no BLOCO 5:**
 
@@ -216,7 +219,6 @@ Validação: 28 testes específicos aprovados; suíte completa com
 
 ## 6. Pendências / A DEFINIR
 
-- **PENDENTE:** implementação e testes do `PATCH` de resultados;
 - **PENDENTE:** constraint QT/QC no banco e migration Alembic;
 - **PENDENTE / A DEFINIR:** tratamento definitivo de `goal_id` legado;
 - **PENDENTE / A DEFINIR:** listagem, filtros, ordenação e paginação;
